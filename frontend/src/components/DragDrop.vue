@@ -4,11 +4,15 @@
         <div v-if="loading" class="text-lg">Loading items...</div>
         <div v-if="error" class="text-red-500 text-lg">Error loading items: {{ error }}</div>
 
-        <!-- <draggable class="dragArea list-group w-full" :list="items" @change="handleDragEnd"> -->
-        <draggable class="dragArea list-group w-full" v-model="items" @change="handleDragEnd">
-            <div class="list-group-item bg-[#c15925] m-1 p-3 rounded-md text-center" v-for="item in items"
-                :key="item.ID">
-                {{ item.title }}
+        <draggable v-model="items" @change="handleDragEnd">
+            <div class="list-group-item flex items-center p-3 border border-base-300 rounded-box transition-opacity duration-300 hover:bg-base-300"
+                :class="{ 'opacity-50 bg-base-200': item.completed }" v-for="item in items" :key="item.ID">
+                <input type="checkbox" class="checkbox checkbox-success mr-3" v-model="item.completed"
+                    @change="toggleTodo(item)" />
+
+                <span class="flex-grow" :class="{ 'line-through': item.completed }">{{ item.title }}</span>
+
+                <button @click="deleteTodo(item.ID)" class="btn btn-ghost btn-sm btn-square">❌</button>
             </div>
         </draggable>
 
@@ -43,7 +47,7 @@ const loadItems = async () => {
             items.value = response.data.sort((a, b) => a.displayOrder - b.displayOrder);
             console.log('Loaded items:', items.value)
         } else {
-            items.value = []; // หรือจัดการ error ตามความเหมาะสม
+            items.value = [];
         }
     } catch (err) {
         console.error('Failed to load items:', err)
@@ -73,7 +77,7 @@ const handleDragEnd = async (event) => {
             });
 
             console.log('Order updated successfully on the server.')
-            
+
         } catch (err) {
             console.error('Failed to update order:', err)
             alert('Failed to save the new order. Please try again.')
@@ -86,12 +90,22 @@ onMounted(loadItems)
 </script>
 
 <style scoped>
-.list-group {
-    min-height: 100px;
-}
 
 .list-group-item:hover {
-    background-color: #d2855f;
+    cursor: pointer; 
+}
+
+.sortable-chosen {
+    background-color: #57c6fd !important;
+    border-color: #99ddff !important;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    cursor: grabbing !important;
+    
+}
+
+.sortable-chosen .flex-grow {
+    color: #1f2937 !important; 
+    opacity: 1 !important;
 }
 </style>
 

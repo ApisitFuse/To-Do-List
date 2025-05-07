@@ -264,5 +264,51 @@ func DeleteTodo(c *gin.Context) {
 	}
 
 	database.DB.Delete(&todo)
+
+	// แบบที่ลบแล้วจะลด order ที่มากกว่ามันลงมาด้วย---------------------------------------------------------
+	// tx := database.DB.Begin()
+	// if tx.Error != nil {
+	// 	log.Printf("Failed to begin transaction for delete: %v", tx.Error)
+	// 	c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to start database transaction"})
+	// 	return
+	// }
+
+	// var todoToDelete models.Todo
+	// // 1. ค้นหา Todo ที่จะลบเพื่อเอา displayOrder เดิม
+	// if err := tx.First(&todoToDelete, id).Error; err != nil {
+	// 	tx.Rollback()
+	// 	if err == gorm.ErrRecordNotFound {
+	// 		log.Printf("Todo ID %s not found for deletion.", id)
+	// 		c.JSON(http.StatusNotFound, gin.H{"error": "Todo not found"})
+	// 	} else {
+	// 		log.Printf("Error fetching todo ID %s for deletion: %v", id, err)
+	// 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error finding todo to delete"})
+	// 	}
+	// 	return
+	// }
+
+	// // 2. ลบ Todo ที่ต้องการ
+	// if err := tx.Delete(&todoToDelete).Error; err != nil {
+	// 	tx.Rollback()
+	// 	log.Printf("Error deleting todo ID %s: %v", id, err)
+	// 	c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete todo"})
+	// 	return
+	// }
+
+	// // 3. ปรับ display_order ของรายการที่มี display_order มากกว่ารายการที่ถูกลบ
+	// // โดยลดค่า display_order ลง 1
+	// if err := tx.Model(&models.Todo{}).Where("display_order > ?", todoToDelete.DisplayOrder).UpdateColumn("display_order", gorm.Expr("display_order - 1")).Error; err != nil {
+	// 	tx.Rollback()
+	// 	log.Printf("Error updating display_order after deleting todo ID %s: %v", id, err)
+	// 	c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update order of subsequent todos"})
+	// 	return
+	// }
+
+	// // Commit Transaction
+	// if err := tx.Commit().Error; err != nil {
+	// 	log.Printf("Transaction commit error for delete: %v", err)
+	// 	c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to commit delete operation"})
+	// 	return
+	// }
 	c.JSON(http.StatusOK, gin.H{"message": "todo deleted"})
 }
