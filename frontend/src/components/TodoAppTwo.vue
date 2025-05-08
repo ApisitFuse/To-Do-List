@@ -1,6 +1,13 @@
 <template>
     <div class="max-w-lg mx-auto mt-10 p-6 bg-base-100 rounded-box shadow-xl">
-        <h1 class="text-3xl font-bold text-center mb-6">To-Do List</h1>
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-bold">To-Do List</h1>
+            <!-- เพิ่มลิงก์ไปยังหน้าถังขยะ -->
+            <router-link to="/trash" class="btn btn-sm btn-outline">
+                ดูถังขยะ
+            </router-link>
+
+        </div>
 
         <input type="text" v-model="newTodo" @keyup.enter="addTodo" placeholder="Add a new task..."
             class="input input-bordered w-full mb-4" />
@@ -22,6 +29,10 @@
                 </button>
             </div>
         </draggable>
+
+        <div class="mt-6 text-center">
+            <router-link to="/" class="btn btn-primary">กลับไปหน้ารายการหลัก</router-link>
+        </div>
     </div>
 </template>
 
