@@ -1,18 +1,35 @@
 package controllers
 
 import (
+	"errors"
 	"fmt"
-	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 	"log"
 	"net/http"
 	"to-do-list-app/database"
 	"to-do-list-app/models"
+
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 func GetTodos(c *gin.Context) {
 	var todos []models.Todo
-	database.DB.Find(&todos)
+	result := database.DB.Order("display_order asc").Find(&todos)
+	if result.Error != nil {
+		log.Printf("Error fetching todos: %v", result.Error)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve todos"})
+		return
+	}
+	c.JSON(http.StatusOK, todos)
+}
+
+func GetTrashed(c *gin.Context) {
+	var todos []models.Todo
+	if err := database.DB.Unscoped().Where("deleted_at IS NOT NULL").Find(&todos).Error; err != nil {
+		log.Printf("Error fetching trashed todos: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve trashed items"})
+		return
+	}
 	c.JSON(http.StatusOK, todos)
 }
 
@@ -311,4 +328,87 @@ func DeleteTodo(c *gin.Context) {
 	// 	return
 	// }
 	c.JSON(http.StatusOK, gin.H{"message": "todo deleted"})
+}
+
+func PermanentlyDeleteTodo(c *gin.Context) {
+	id := c.Param("id")
+	var todoToDeleteInfo models.Todo
+
+	if err := database.DB.Unscoped().First(&todoToDeleteInfo, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Todo not found for permanent deletion"})
+			return
+		}
+		log.Printf("Error finding todo %s for permanent deletion: %v", id, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error finding todo"})
+		return
+	}
+
+	tx := database.DB.Begin()
+	if tx.Error != nil {
+		log.Printf("Failed to begin transaction for permanent delete: %v", tx.Error)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to start database transaction"})
+		return
+	}
+
+	if err := tx.Unscoped().Delete(&models.Todo{}, id).Error; err != nil {
+		tx.Rollback()
+		log.Printf("Error permanently deleting todo %s: %v", id, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to permanently delete todo"})
+		return
+	}
+
+	if err := tx.Unscoped().Model(&models.Todo{}).Where("display_order > ?", todoToDeleteInfo.DisplayOrder).UpdateColumn("display_order", gorm.Expr("display_order - 1")).Error; err != nil {
+		tx.Rollback()
+		log.Printf("Error updating display_order after permanently deleting todo ID %s: %v", id, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update order of subsequent todos"})
+		return
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		log.Printf("Transaction commit error for permanent delete: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to commit delete operation"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Todo permanently deleted"})
+}
+
+func RestoreTodo(c *gin.Context) {
+	id := c.Param("id")
+	var todo models.Todo
+
+	// Find the todo item, including soft-deleted ones.
+	// We must use Unscoped() here because we are trying to find an item that is (presumably) soft-deleted.
+	if err := database.DB.Unscoped().First(&todo, id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Todo not found in trash or elsewhere"})
+		} else {
+			log.Printf("Error finding todo %s for restore: %v", id, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error finding todo to restore"})
+		}
+		return
+	}
+
+	// Check if the todo is actually soft-deleted.
+	// todo.DeletedAt is gorm.DeletedAt (which is sql.NullTime). It's 'Valid' if the record is soft-deleted.
+	if !todo.DeletedAt.Valid {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Todo is not in trash, cannot restore"})
+		return
+	}
+
+	// Restore the todo by setting deleted_at to NULL.
+	// Using Model(&models.Todo{}) allows updating without fetching the full model into 'todo' again,
+	// and Unscoped() ensures we can target a soft-deleted record for this update.
+	if err := database.DB.Unscoped().Model(&models.Todo{}).Where("id = ?", id).Update("deleted_at", nil).Error; err != nil {
+		log.Printf("Error restoring todo %s: %v", id, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to restore todo"})
+		return
+	}
+
+	// Fetch the now-restored todo to return it. It should be findable without Unscoped() now.
+	var restoredTodo models.Todo
+	database.DB.First(&restoredTodo, id) // Populate restoredTodo with the latest data
+
+	c.JSON(http.StatusOK, restoredTodo)
 }
